@@ -1,9 +1,15 @@
 name: Build macOS M1
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref == 'refs/heads/dev' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
+
 jobs:
   Main:
-    # We always process desktop release tags, because they also publish the release
-    if: github.repository == 'laurent22/joplin'
     runs-on: macos-latest
     steps:
 
@@ -61,6 +67,8 @@ jobs:
           npm pkg set 'build.mac.target[0].arch[0]'='arm64'
           npm pkg set 'build.mac.target[1].target'='zip'
           npm pkg set 'build.mac.target[1].arch[0]'='arm64'
+          npm pkg set 'build.mac.target[2].target'='pkg'
+          npm pkg set 'build.mac.target[2].arch[0]'='arm64'
 
           if [[ "$PUBLISH_ENABLED" == "true" ]]; then
             echo "Building and publishing desktop application..."
@@ -77,5 +85,16 @@ jobs:
             export CSC_IDENTITY_AUTO_DISCOVERY=false
             npm pkg set 'build.mac.identity'=null --json
 
-            PYTHON_PATH=$(which python) USE_HARD_LINKS=false yarn dist  --mac --arm64 --publish=never
+            PYTHON_PATH=$(which python) USE_HARD_LINKS=false yarn dist --mac --arm64 --publish=never
           fi
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: joplin-macos-arm64-${{ github.run_number }}
+          path: |
+            packages/app-desktop/dist/*.dmg
+            packages/app-desktop/dist/*.zip
+            packages/app-desktop/dist/*.pkg
+          if-no-files-found: error
+          retention-days: 7
